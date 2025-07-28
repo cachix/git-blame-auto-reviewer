@@ -22,11 +22,11 @@ jobs:
   assign-reviewers:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Required for git blame
 
-      - uses: your-org/git-blame-auto-reviewer@main
+      - uses: cachix/git-blame-auto-reviewer@main
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           max-reviewers: 3
