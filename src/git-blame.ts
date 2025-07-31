@@ -50,7 +50,10 @@ export async function analyzeFileBlame(
   return commitCounts;
 }
 
-async function checkFileExists(filename: string, ref: string): Promise<boolean> {
+async function checkFileExists(
+  filename: string,
+  ref: string,
+): Promise<boolean> {
   try {
     await execCommand(`git cat-file -e ${ref}:${filename}`);
     return true;
@@ -174,7 +177,9 @@ async function execCommand(command: string): Promise<string> {
 
   if (exitCode !== 0) {
     const errorMessage = error || `Command failed with exit code ${exitCode}`;
-    throw new Error(`Failed to execute command: ${command}\nError: ${errorMessage}`);
+    throw new Error(
+      `Failed to execute command: ${command}\nError: ${errorMessage}`,
+    );
   }
 
   if (error) {

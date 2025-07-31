@@ -24,10 +24,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Required for git blame
+          fetch-depth: 0 # Required for git blame
 
       - uses: cachix/git-blame-auto-reviewer@main
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           max-reviewers: 3
           threshold: 20 # Minimal percentage of changes
+```

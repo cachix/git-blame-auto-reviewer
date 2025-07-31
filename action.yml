@@ -1,43 +1,43 @@
-name: 'Git Blame Auto Reviewer'
-description: 'Automatically suggest reviewers by commenting on PRs based on git blame analysis'
-author: 'Your Name'
+name: "Git Blame Auto Reviewer"
+description: "Automatically suggest reviewers by commenting on PRs based on git blame analysis"
+author: "Your Name"
 
 inputs:
   token:
-    description: 'GitHub token'
+    description: "GitHub token"
     required: true
     default: ${{ github.token }}
 
   max-reviewers:
-    description: 'Maximum number of reviewers to assign'
+    description: "Maximum number of reviewers to assign"
     required: false
-    default: '3'
+    default: "3"
 
   threshold:
-    description: 'Minimum percentage of lines authored to be added as reviewer'
+    description: "Minimum percentage of lines authored to be added as reviewer"
     required: false
-    default: '20'
+    default: "20"
 
   ignore-authors:
-    description: 'Comma-separated list of authors to ignore (e.g., bots)'
+    description: "Comma-separated list of authors to ignore (e.g., bots)"
     required: false
-    default: 'dependabot[bot],renovate[bot],github-actions[bot]'
+    default: "dependabot[bot],renovate[bot],github-actions[bot]"
 
   lookback-days:
-    description: 'Only consider commits from the last N days (0 for all history)'
+    description: "Only consider commits from the last N days (0 for all history)"
     required: false
-    default: '0'
+    default: "0"
 
 outputs:
   reviewers:
-    description: 'Comma-separated list of reviewers that were suggested'
+    description: "Comma-separated list of reviewers that were suggested"
   reviewer-count:
-    description: 'Number of reviewers suggested'
+    description: "Number of reviewers suggested"
 
 runs:
-  using: 'node16'
-  main: 'dist/index.js'
+  using: "node16"
+  main: "dist/index.js"
 
 branding:
-  icon: 'users'
-  color: 'blue'
+  icon: "users"
+  color: "blue"

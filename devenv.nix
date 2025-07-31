@@ -11,4 +11,9 @@
       install.enable = true;
     };
   };
+
+  git-hooks.hooks = {
+    prettier.enable = true;
+    prettier.excludes = [ "dist" ];
+  };
 }

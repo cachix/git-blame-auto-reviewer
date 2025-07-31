@@ -80,7 +80,8 @@ async function run(): Promise<void> {
           stats.commits.add(commit);
         }
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
         throw new Error(`Failed to analyze ${file.filename}: ${errorMessage}`);
       }
     }
@@ -164,8 +165,7 @@ async function run(): Promise<void> {
     );
 
     // Apply max reviewers limit
-    const reviewersToSuggest = potentialReviewers
-      .slice(0, inputs.maxReviewers);
+    const reviewersToSuggest = potentialReviewers.slice(0, inputs.maxReviewers);
 
     if (reviewersToSuggest.length === 0) {
       core.info("📭 No reviewers meet the threshold criteria");
@@ -173,12 +173,18 @@ async function run(): Promise<void> {
     }
 
     // Create comment with review suggestions
-    core.info(`📬 Creating comment to suggest reviewers: ${reviewersToSuggest.map(r => r.username).join(", ")}`);
-    await createReviewComment(octokit, context, reviewersToSuggest.map(r => ({
-      username: r.username,
-      percentage: r.stats.percentageOfChanges,
-      linesChanged: r.stats.linesChanged
-    })));
+    core.info(
+      `📬 Creating comment to suggest reviewers: ${reviewersToSuggest.map((r) => r.username).join(", ")}`,
+    );
+    await createReviewComment(
+      octokit,
+      context,
+      reviewersToSuggest.map((r) => ({
+        username: r.username,
+        percentage: r.stats.percentageOfChanges,
+        linesChanged: r.stats.linesChanged,
+      })),
+    );
 
     // Output summary
     core.info("\n📊 Review Suggestion Summary:");
@@ -190,7 +196,10 @@ async function run(): Promise<void> {
     });
 
     // Set outputs
-    core.setOutput("reviewers", reviewersToSuggest.map(r => r.username).join(","));
+    core.setOutput(
+      "reviewers",
+      reviewersToSuggest.map((r) => r.username).join(","),
+    );
     core.setOutput("reviewer-count", reviewersToSuggest.length.toString());
   } catch (error) {
     core.setFailed(
