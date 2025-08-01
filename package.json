@@ -2,7 +2,6 @@
   "name": "git-blame-auto-reviewer",
   "version": "1.0.0",
   "description": "GitHub Action to automatically request reviews from code authors based on git blame",
-  "type": "module",
   "private": true,
   "homepage": "https://github.com/cachix/git-blame-auto-reviewer",
   "repository": {
