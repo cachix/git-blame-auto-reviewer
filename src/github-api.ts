@@ -1,5 +1,6 @@
 import * as core from "@actions/core";
 import * as github from "@actions/github";
+import type { ChangedFile } from "./types";
 import type { GitHub } from "@actions/github/lib/utils";
 
 type Octokit = InstanceType<typeof GitHub>;
@@ -7,7 +8,7 @@ type Octokit = InstanceType<typeof GitHub>;
 export async function getChangedFiles(
   octokit: Octokit,
   context: typeof github.context,
-): Promise<Array<{ filename: string; status: string }>> {
+): Promise<ChangedFile[]> {
   const { owner, repo } = context.repo;
   const pullNumber = context.payload.pull_request?.number;
 
@@ -22,8 +23,14 @@ export async function getChangedFiles(
     per_page: 100,
   });
 
-  // Filter out removed files
-  return files.filter((file) => file.status !== "removed");
+  // Filter out removed files, they have no lines left to blame
+  return files
+    .filter((file) => file.status !== "removed")
+    .map((file) => ({
+      filename: file.filename,
+      status: file.status,
+      patch: file.patch,
+    }));
 }
 
 export async function resolveCommitAuthor(

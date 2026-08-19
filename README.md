@@ -39,16 +39,15 @@ jobs:
           fetch-depth: 0 # Required for git blame
           persist-credentials: false
 
-      # Make the PR head available as a git object to diff against. Nothing from
-      # it is checked out or executed.
-      - run: git fetch --no-tags origin +refs/pull/${{ github.event.pull_request.number }}/head
-
       - uses: cachix/git-blame-auto-reviewer@main
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           max-reviewers: 3
           threshold: 20 # Minimal percentage of changes
 ```
+
+Pin the action to a commit rather than `@main` when the job holds a writable
+token, otherwise push access to this repository is push access to yours.
 
 ## Security
 
@@ -57,8 +56,9 @@ The action is meant to be safe to run under `pull_request_target`:
 - Git is invoked with an explicit argument list, never through a shell, so a
   pull request that adds a file named `harmless$(...)x.txt` cannot turn a
   filename into a command. There is a regression test for this.
-- Only base branch history is read. The pull request's head is used as a diff
-  target, its contents are never checked out or executed.
+- Nothing from the pull request is fetched, checked out, or executed. Changed
+  line numbers come from the patch in the pull request files API, and only base
+  branch history is read from disk.
 - A failure to post the comment is a warning, not a failed check.
 
 Keep the checkout pinned to the base ref as shown above. Checking out

@@ -51,7 +51,6 @@ async function run(): Promise<void> {
       try {
         const blameData = await analyzeFileBlame(file, {
           baseRef: pullRequest.base.sha,
-          headRef: pullRequest.head.sha,
           lookbackDays: inputs.lookbackDays,
         });
 
