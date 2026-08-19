@@ -1,9 +1,9 @@
 import * as exec from "@actions/exec";
 import * as core from "@actions/core";
+import type { ChangedFile } from "./types";
 
 interface BlameOptions {
   baseRef: string;
-  headRef: string;
   lookbackDays?: number;
 }
 
@@ -15,10 +15,16 @@ interface BlameLine {
 }
 
 export async function analyzeFileBlame(
-  file: { filename: string; status: string },
+  file: ChangedFile,
   options: BlameOptions,
 ): Promise<Map<string, number>> {
-  const { baseRef, headRef, lookbackDays } = options;
+  const { baseRef, lookbackDays } = options;
+
+  // Binary files and very large diffs come back without a patch.
+  if (!file.patch) {
+    core.debug(`Skipping ${file.filename}: no patch in the API response`);
+    return new Map();
+  }
 
   // Check if file exists at base ref (skip new files)
   const fileExistsAtBase = await checkFileExists(file.filename, baseRef);
@@ -27,8 +33,7 @@ export async function analyzeFileBlame(
     return new Map();
   }
 
-  // Get the diff to find changed lines
-  const changedLines = await getChangedLines(file.filename, baseRef, headRef);
+  const changedLines = parseChangedLines(file.patch);
   if (changedLines.length === 0) {
     return new Map();
   }
@@ -62,24 +67,21 @@ async function checkFileExists(
   }
 }
 
-async function getChangedLines(
-  filename: string,
-  baseRef: string,
-  headRef: string,
-): Promise<number[]> {
-  const diffOutput = await execGit([
-    "diff",
-    `${baseRef}..${headRef}`,
-    "--",
-    filename,
-  ]);
-
-  const lines = diffOutput.split("\n");
+/**
+ * Line numbers, in the base version of the file, that the pull request removes
+ * or rewrites.
+ *
+ * The patch comes from the pull request files API rather than from a local
+ * `git diff`, so the head commit never has to be fetched into a job that may be
+ * running with a writable token.
+ */
+export function parseChangedLines(patch: string): number[] {
   const changedLines: number[] = [];
   let currentLine = 0;
 
-  for (const line of lines) {
-    // Parse diff headers like @@ -10,7 +10,7 @@
+  for (const line of patch.split("\n")) {
+    // Hunk headers look like @@ -10,7 +10,7 @@, the first number is where the
+    // hunk starts in the base version of the file.
     const hunkMatch = line.match(/^@@ -(\d+),?\d* \+(\d+),?\d* @@/);
     if (hunkMatch) {
       currentLine = parseInt(hunkMatch[1], 10);
@@ -89,7 +91,14 @@ async function getChangedLines(
     if (line.startsWith("-")) {
       // Line was removed or modified
       changedLines.push(currentLine);
-    } else if (!line.startsWith("+")) {
+      currentLine++;
+    } else if (line.startsWith("+")) {
+      // Added lines do not exist in the base version, nothing to blame
+      continue;
+    } else if (line.startsWith("\\")) {
+      // "\ No newline at end of file" is a note about the previous line
+      continue;
+    } else {
       // Context line
       currentLine++;
     }

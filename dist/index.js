@@ -41,18 +41,23 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.analyzeFileBlame = analyzeFileBlame;
+exports.parseChangedLines = parseChangedLines;
 const exec = __importStar(__nccwpck_require__(5236));
 const core = __importStar(__nccwpck_require__(7484));
 async function analyzeFileBlame(file, options) {
-    const { baseRef, headRef, lookbackDays } = options;
+    const { baseRef, lookbackDays } = options;
+    // Binary files and very large diffs come back without a patch.
+    if (!file.patch) {
+        core.debug(`Skipping ${file.filename}: no patch in the API response`);
+        return new Map();
+    }
     // Check if file exists at base ref (skip new files)
     const fileExistsAtBase = await checkFileExists(file.filename, baseRef);
     if (!fileExistsAtBase) {
         core.debug(`Skipping new file: ${file.filename}`);
         return new Map();
     }
-    // Get the diff to find changed lines
-    const changedLines = await getChangedLines(file.filename, baseRef, headRef);
+    const changedLines = parseChangedLines(file.patch);
     if (changedLines.length === 0) {
         return new Map();
     }
@@ -78,18 +83,20 @@ async function checkFileExists(filename, ref) {
         return false;
     }
 }
-async function getChangedLines(filename, baseRef, headRef) {
-    const diffOutput = await execGit([
-        "diff",
-        `${baseRef}..${headRef}`,
-        "--",
-        filename,
-    ]);
-    const lines = diffOutput.split("\n");
+/**
+ * Line numbers, in the base version of the file, that the pull request removes
+ * or rewrites.
+ *
+ * The patch comes from the pull request files API rather than from a local
+ * `git diff`, so the head commit never has to be fetched into a job that may be
+ * running with a writable token.
+ */
+function parseChangedLines(patch) {
     const changedLines = [];
     let currentLine = 0;
-    for (const line of lines) {
-        // Parse diff headers like @@ -10,7 +10,7 @@
+    for (const line of patch.split("\n")) {
+        // Hunk headers look like @@ -10,7 +10,7 @@, the first number is where the
+        // hunk starts in the base version of the file.
         const hunkMatch = line.match(/^@@ -(\d+),?\d* \+(\d+),?\d* @@/);
         if (hunkMatch) {
             currentLine = parseInt(hunkMatch[1], 10);
@@ -98,8 +105,17 @@ async function getChangedLines(filename, baseRef, headRef) {
         if (line.startsWith("-")) {
             // Line was removed or modified
             changedLines.push(currentLine);
+            currentLine++;
         }
-        else if (!line.startsWith("+")) {
+        else if (line.startsWith("+")) {
+            // Added lines do not exist in the base version, nothing to blame
+            continue;
+        }
+        else if (line.startsWith("\\")) {
+            // "\ No newline at end of file" is a note about the previous line
+            continue;
+        }
+        else {
             // Context line
             currentLine++;
         }
@@ -249,8 +265,14 @@ async function getChangedFiles(octokit, context) {
         pull_number: pullNumber,
         per_page: 100,
     });
-    // Filter out removed files
-    return files.filter((file) => file.status !== "removed");
+    // Filter out removed files, they have no lines left to blame
+    return files
+        .filter((file) => file.status !== "removed")
+        .map((file) => ({
+        filename: file.filename,
+        status: file.status,
+        patch: file.patch,
+    }));
 }
 async function resolveCommitAuthor(octokit, context, commitSha) {
     var _a, _b;
@@ -433,7 +455,6 @@ async function run() {
             try {
                 const blameData = await (0, git_blame_1.analyzeFileBlame)(file, {
                     baseRef: pullRequest.base.sha,
-                    headRef: pullRequest.head.sha,
                     lookbackDays: inputs.lookbackDays,
                 });
                 // Aggregate stats by commit (we'll resolve to users later)

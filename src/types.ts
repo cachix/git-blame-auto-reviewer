@@ -24,3 +24,10 @@ export interface ActionInputs {
   ignoreAuthors: string[];
   lookbackDays: number;
 }
+
+export interface ChangedFile {
+  filename: string;
+  status: string;
+  /** Unified diff for this file, absent for binary or very large changes. */
+  patch?: string;
+}
